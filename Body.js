@@ -86,6 +86,18 @@ function Body(options) {
    * @type {Number}
    */
   this.invMass = mass > 0 ? 1.0 / mass : 0;
+
+  /**
+   * @property shapes
+   * @type {array}
+   */
+  this.shapes = [];
+
+  /**
+   * @property aabb
+   * @type {AABB}
+   */
+  this.aabb = new AABB();
 }
 
 
@@ -113,4 +125,30 @@ Body.prototype.applyImpulse = function(impulse, worldPoint) {
 
   // Add rotational Impulse
   this.angularVelocity = this.angularVelocity.vadd(rotVelo);
+};
+
+/**
+ * Add a shape to the body.
+ * @method addShape
+ * @param {Shape} shape
+ * @return {Body} The body object, for chainability.
+ */
+Body.prototype.addShape = function(shape) {
+  this.shapes.push(shape);
+
+  return this;
+};
+
+/**
+ * Updates the .aabb
+ * @method computeAABB
+ * @todo rename to updateAABB()
+ */
+Body.prototype.computeAABB = function() {
+  for (var i = 0; i !== this.shapes.length; i++) {
+    var shape = this.shapes[i];
+
+    // Get shape AABB
+    this.aabb = shape.calculateWorldAABB(this.position, this.quaternion);
+  }
 };

@@ -18,6 +18,7 @@ var ix = 90;
 
 // To be synced
 var meshes = [];
+var bbMeshes = {};
 
 var m = 0.1, // Cube mass in kg
   rho = 1.2, // Density of air.
@@ -108,6 +109,10 @@ function createCube(position) {
     angularDamping: 0,
     position: position
   });
+  var shape = new Box({
+    halfExtents: new Vec3(0.5, 0.5, 0.5)
+  });
+  boxBody.addShape(shape);
   boxBody.invInertiaWorld.copy(new Mat3([1.2, 0, 0, 0, 1.2, 0, 0, 0, 1.2]));
   world.addBody(boxBody);
 }
@@ -192,8 +197,8 @@ function render() {
       vel = Math.cos((ix + (i + 10) * 10) / 180 * Math.PI) * 2;
       world.bodies[i].angularVelocity.z = world.bodies[i].velocity.z = vel;
     }
-    
-    
+
+
   }
 
   updatePhysics();
@@ -204,8 +209,35 @@ function render() {
 function updatePhysics() {
   world.step(dt);
   for (var i = 0; i !== meshes.length; i++) {
-    meshes[i].position.copy(world.bodies[i].position);
-    meshes[i].quaternion.copy(world.bodies[i].quaternion);
+    var body = world.bodies[i];
+    meshes[i].position.copy(body.position);
+    meshes[i].quaternion.copy(body.quaternion);
+
+    /* PHYSICS DEBUG START */
+    var bbMesh = bbMeshes[meshes[i].uuid];
+
+    body.computeAABB();
+
+    if (bbMesh === undefined) {
+      var bboxGeometry = new THREE.BoxGeometry(1, 1, 1);
+      var bboxMaterial = new THREE.MeshBasicMaterial({
+        wireframe: true
+      });
+      bbMesh = bbMeshes[meshes[i].uuid] = new THREE.Mesh(bboxGeometry, bboxMaterial);
+      scene.add(bbMesh);
+    }
+
+    var aabb = body.aabb;
+
+    bbMesh.scale.set(aabb.lowerBound.x - aabb.upperBound.x,
+      aabb.lowerBound.y - aabb.upperBound.y,
+      aabb.lowerBound.z - aabb.upperBound.z);
+
+    bbMesh.position.set((aabb.lowerBound.x + aabb.upperBound.x) * 0.5,
+      (aabb.lowerBound.y + aabb.upperBound.y) * 0.5,
+      (aabb.lowerBound.z + aabb.upperBound.z) * 0.5);
+
+    /* PHYSICS DEBUG END */
   }
 }
 

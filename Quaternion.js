@@ -94,3 +94,35 @@ Quaternion.prototype.normalize = function(){
         this.w *= l;
     }
 };
+
+/**
+ * Multiply the quaternion by a vector
+ * @method vmult
+ * @param {Vec3} v
+ * @param {Vec3} target Optional
+ * @return {Vec3}
+ */
+Quaternion.prototype.vmult = function(v,target){
+    target = target || new Vec3();
+ 
+    var x = v.x,
+        y = v.y,
+        z = v.z;
+ 
+    var qx = this.x,
+        qy = this.y,
+        qz = this.z,
+        qw = this.w;
+ 
+    // q*v
+    var ix =  qw * x + qy * z - qz * y,
+    iy =  qw * y + qz * x - qx * z,
+    iz =  qw * z + qx * y - qy * x,
+    iw = -qx * x - qy * y - qz * z;
+ 
+    target.x = ix * qw + iw * -qx + iy * -qz - iz * -qy;
+    target.y = iy * qw + iw * -qy + iz * -qx - ix * -qz;
+    target.z = iz * qw + iw * -qz + ix * -qy - iy * -qx;
+ 
+    return target;
+};
