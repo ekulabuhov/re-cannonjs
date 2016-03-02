@@ -37,6 +37,7 @@ World.prototype.internalStep = function(dt) {
     }
   }
 
+  // Apply linear and angular velocity
   for (i = 0; i !== this.bodies.length; i++) {
     var body = this.bodies[i];
 
@@ -60,6 +61,8 @@ World.prototype.internalStep = function(dt) {
       body.quaternion.normalize();
     }
   }
+
+  this.collidingPairs = this.broadphase.getCollisionPairs();
 }
 
 /**

@@ -51,11 +51,11 @@ function init() {
 
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.cullFace = THREE.CullFaceBack;
-  renderer.setClearColor(0x000000, 1.0);
+  renderer.setClearColor(0xFFF, 1.0);
   renderer.setSize(window.innerWidth, window.innerHeight);
 
   // create a cube and add to scene
-  createScene();
+  createBroadPhaseColisionScene();
 
   // position and point the camera to the center of the scene
   camera.position.x = 0;
@@ -66,13 +66,6 @@ function init() {
   // add the output of the renderer to the html element
   document.body.appendChild(renderer.domElement);
 
-  control = new function() {
-    this.cube = _cubeRed;
-    this.omega = omega;
-    this.drag = 0.01;
-  };
-  addControls(control);
-
   // call the render function
   render();
 }
@@ -81,6 +74,7 @@ var _cubeRed, boxBody;
 
 function initCannon() {
   world = new World();
+  world.broadphase = new SAPBroadphase(world);
 
   // Add an impulse to the center
   var f = 500,
@@ -92,8 +86,14 @@ function initCannon() {
 }
 
 function createCube(position) {
+  var dynamicTexture = new THREEx.DynamicTexture(512, 512)
+  dynamicTexture.context.font = "bolder 90px Verdana";
+  dynamicTexture.texture.anisotropy = renderer.getMaxAnisotropy()
+
   var cubeGeometry = new THREE.BoxGeometry(1, 1, 1);
-  var cubeMaterial = new THREE.MeshPhongMaterial();
+  var cubeMaterial = new THREE.MeshPhongMaterial({
+    map: dynamicTexture.texture
+  });
   cubeMaterial.color = new THREE.Color('red');
   _cubeRed = new THREE.Mesh(cubeGeometry, cubeMaterial);
   _cubeRed.castShadow = true;
@@ -115,13 +115,34 @@ function createCube(position) {
   boxBody.addShape(shape);
   boxBody.invInertiaWorld.copy(new Mat3([1.2, 0, 0, 0, 1.2, 0, 0, 0, 1.2]));
   world.addBody(boxBody);
+
+  // Debug code
+  dynamicTexture.clear('cyan')
+    .drawText(boxBody.id, undefined, 256, 'red');
 }
 
-function createScene() {
+function createContactScene() {
+  addLightAndPlaneToScene();
+}
+
+function createBroadPhaseColisionScene() {
   for (var i = 0; i <= 10; i++) {
     createCube(new Vec3(Math.random() * 5 - 2.5, Math.random() * 3 - 1, Math.random()));
   }
 
+  addLightAndPlaneToScene();
+
+  control = new function() {
+    this.cube = _cubeRed;
+    this.omega = omega;
+    this.drag = 0.01;
+  };
+  addControls(control);
+
+  this.objectBehaviourFunc = rotateAndSwingBehaviour;
+}
+
+function addLightAndPlaneToScene() {
   // LIGHTS
 
   hemiLight = new THREE.HemisphereLight(0xffffff, 0xffffff, 0.6);
@@ -186,10 +207,17 @@ var vel;
 function render() {
   renderer.render(scene, camera);
 
+  this.objectBehaviourFunc();
 
+  updatePhysics();
+
+  requestAnimationFrame(render);
+}
+
+function rotateAndSwingBehaviour() {
   ix++;
 
-  for (var i = 0; i <= 10; i++) {
+  for (var i = 0; i < world.bodies.length; i++) {
     if (i % 2) {
       vel = Math.sin((ix - (i + 10) * 10) / 180 * Math.PI) * 2;
       world.bodies[i].angularVelocity.x = world.bodies[i].velocity.x = vel;
@@ -197,13 +225,7 @@ function render() {
       vel = Math.cos((ix + (i + 10) * 10) / 180 * Math.PI) * 2;
       world.bodies[i].angularVelocity.z = world.bodies[i].velocity.z = vel;
     }
-
-
   }
-
-  updatePhysics();
-
-  requestAnimationFrame(render);
 }
 
 function updatePhysics() {
@@ -221,6 +243,7 @@ function updatePhysics() {
     if (bbMesh === undefined) {
       var bboxGeometry = new THREE.BoxGeometry(1, 1, 1);
       var bboxMaterial = new THREE.MeshBasicMaterial({
+        color: 0xff0000,
         wireframe: true
       });
       bbMesh = bbMeshes[meshes[i].uuid] = new THREE.Mesh(bboxGeometry, bboxMaterial);
@@ -237,6 +260,10 @@ function updatePhysics() {
       (aabb.lowerBound.y + aabb.upperBound.y) * 0.5,
       (aabb.lowerBound.z + aabb.upperBound.z) * 0.5);
 
+    var collidingIds = [].concat.apply([], world.collidingPairs.sap).map(function(x) {
+      return x.body.id
+    });
+    bbMesh.material.color = (collidingIds.indexOf(body.id) !== -1) ? new THREE.Color(0xff0000) : new THREE.Color(0x000000);
     /* PHYSICS DEBUG END */
   }
 }

@@ -1,6 +1,11 @@
 // var Vec3 = require('../math/Vec3');
 
+// Static
+Body.idCounter = 0;
+
 function Body(options) {
+  this.id = Body.idCounter++;
+  
   var mass = typeof(options.mass) === 'number' ? options.mass : 0;
 
   /**
