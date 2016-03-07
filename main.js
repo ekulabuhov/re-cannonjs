@@ -5,32 +5,15 @@ var camera;
 
 var world;
 var dt = 1 / 60;
-
-var control;
-
-var xAxis = new THREE.Vector3(1, 0, 0);
-var yAxis = new THREE.Vector3(0, 1, 0);
-var zAxis = new THREE.Vector3(0, 0, 1);
-
-var omega = new THREE.Vector3(0.01, 0.01, 0.01);
 var ix = 90;
 
 
 // To be synced
-var meshes = [];
-var bbMeshes = {};
-
-var m = 0.1, // Cube mass in kg
-  rho = 1.2, // Density of air.
-  // https://en.wikipedia.org/wiki/Drag_coefficient
-  C_d = 1.05, // Drag for ball is 0.47. Cube is 1.05
-  A = 6 / 1e4, // Surface area for cube is 6a^2
-  vy = 0, // Speed of the object
-  dt = 0.02, // Time step
-  e = -0.5, // Coefficient of restitution ("bounciness")
-  height = -4,
-  ay = 0,
-  r = 0.5;
+var meshes = [],
+  bbMeshes = {},
+  showBBMeshes = true,
+  contactMeshes = [],
+  showBoundingSpheres = true;
 
 initCannon();
 init();
@@ -56,6 +39,7 @@ function init() {
 
   // create a cube and add to scene
   createBroadPhaseColisionScene();
+  //createContactScene();
 
   // position and point the camera to the center of the scene
   camera.position.x = 0;
@@ -63,14 +47,18 @@ function init() {
   camera.position.z = 13;
   camera.lookAt(scene.position);
 
+  controls = new THREE.OrbitControls(camera, renderer.domElement);
+  //controls.addEventListener( 'change', render ); // add this only if there is no animation loop (requestAnimationFrame)
+  controls.enableDamping = true;
+  controls.dampingFactor = 0.25;
+  controls.enableZoom = false;
+
   // add the output of the renderer to the html element
   document.body.appendChild(renderer.domElement);
 
   // call the render function
   render();
 }
-
-var _cubeRed, boxBody;
 
 function initCannon() {
   world = new World();
@@ -82,9 +70,11 @@ function initCannon() {
     damping = 0.5;
   var worldPoint = new Vec3(0, 0.1, 0);
   var impulse = new Vec3(0, 0, f * dt);
-  //boxBody.applyImpulse(impulse, worldPoint);
 }
 
+/**
+ * @param {Vec3} position
+ */
 function createCube(position) {
   var dynamicTexture = new THREEx.DynamicTexture(512, 512)
   dynamicTexture.context.font = "bolder 90px Verdana";
@@ -95,19 +85,20 @@ function createCube(position) {
     map: dynamicTexture.texture
   });
   cubeMaterial.color = new THREE.Color('red');
-  _cubeRed = new THREE.Mesh(cubeGeometry, cubeMaterial);
-  _cubeRed.castShadow = true;
-  _cubeRed.receiveShadow = true;
+  var cubeMesh = new THREE.Mesh(cubeGeometry, cubeMaterial);
+  cubeMesh.castShadow = true;
+  cubeMesh.receiveShadow = true;
 
-  meshes.push(_cubeRed);
-  scene.add(_cubeRed);
+  meshes.push(cubeMesh);
+  scene.add(cubeMesh);
 
   // Physics setup
   boxBody = new Body({
     mass: 5,
     linearDamping: 0.5,
-    angularDamping: 0,
-    position: position
+    angularDamping: 0.5,
+    position: position,
+    mesh: cubeMesh
   });
   var shape = new Box({
     halfExtents: new Vec3(0.5, 0.5, 0.5)
@@ -116,13 +107,15 @@ function createCube(position) {
   boxBody.invInertiaWorld.copy(new Mat3([1.2, 0, 0, 0, 1.2, 0, 0, 0, 1.2]));
   world.addBody(boxBody);
 
-  // Debug code
+  // Draw id of the cube on its body
   dynamicTexture.clear('cyan')
     .drawText(boxBody.id, undefined, 256, 'red');
 }
 
 function createContactScene() {
   addLightAndPlaneToScene();
+  createCube(new Vec3(-1, 0, 5));
+  createCube(new Vec3(1, 0, 5));
 }
 
 function createBroadPhaseColisionScene() {
@@ -130,16 +123,11 @@ function createBroadPhaseColisionScene() {
     createCube(new Vec3(Math.random() * 5 - 2.5, Math.random() * 3 - 1, Math.random()));
   }
 
+  addControls();
   addLightAndPlaneToScene();
 
-  control = new function() {
-    this.cube = _cubeRed;
-    this.omega = omega;
-    this.drag = 0.01;
-  };
-  addControls(control);
-
   this.objectBehaviourFunc = rotateAndSwingBehaviour;
+  world.gravity = new Vec3(0, 0, 0);
 }
 
 function addLightAndPlaneToScene() {
@@ -185,29 +173,21 @@ function addLightAndPlaneToScene() {
   ground.receiveShadow = true;
 }
 
-function addControls(controlObject) {
+function addControls() {
   var gui = new dat.GUI();
-  controlObject.cube.position.set(0.01, 0.01, 0.01);
-  gui.add(controlObject.cube.position, 'x', -5.0, 5.0).step(0.01).listen();
-  gui.add(controlObject.cube.position, 'y', -5.0, 5.0).step(0.01).listen();
-  gui.add(controlObject.cube.position, 'z', -5.0, 5.0).step(0.01).listen();
-  var f2 = gui.addFolder('omega');
-  f2.add(controlObject.omega, 'x', -5.0, 5.0).step(0.1).listen();
-  f2.add(controlObject.omega, 'y', -5.0, 5.0).step(0.1).listen();
-  f2.add(controlObject.omega, 'z', -5.0, 5.0).step(0.1).listen();
-  f2.open();
-  controlObject.omega.set(0, 0, 0);
-
-  gui.add(controlObject, 'drag', -5.0, 5.0).step(0.01).listen();
-  //gui.add(controlObject.quaternion, 'x', -1.0, 1.0).step(0.01).listen();
+  gui.add(world.bodies[0].mesh.position, 'x', -5.0, 5.0).step(0.01).listen();
+  gui.add(world.bodies[0].mesh.position, 'y', -5.0, 5.0).step(0.01).listen();
+  gui.add(world.bodies[0].mesh.position, 'z', -5.0, 5.0).step(0.01).listen();
+  gui.add(this, 'showBBMeshes');
+  gui.add(this, 'showBoundingSpheres');
 }
-
-var vel;
 
 function render() {
   renderer.render(scene, camera);
 
-  this.objectBehaviourFunc();
+  if (this.objectBehaviourFunc) {
+    this.objectBehaviourFunc();
+  }
 
   updatePhysics();
 
@@ -215,6 +195,7 @@ function render() {
 }
 
 function rotateAndSwingBehaviour() {
+  var vel;
   ix++;
 
   for (var i = 0; i < world.bodies.length; i++) {
@@ -235,76 +216,91 @@ function updatePhysics() {
     meshes[i].position.copy(body.position);
     meshes[i].quaternion.copy(body.quaternion);
 
-    /* PHYSICS DEBUG START */
-    var bbMesh = bbMeshes[meshes[i].uuid];
+    /* PHYSICS DEBUG AABB START */
+    if (showBBMeshes) {
+      drawBBMeshes(i, body);
+    } else {
+      bbMeshes[meshes[i].uuid].position.x = 200;
+    }
+    /* PHYSICS DEBUG AABB END */
 
-    body.computeAABB();
+    /* PHYSICS DEBUG CONTACTS START */
+    contactMeshes.forEach(mesh => {
+      mesh.position.x = 20;
+    });
 
-    if (bbMesh === undefined) {
-      var bboxGeometry = new THREE.BoxGeometry(1, 1, 1);
-      var bboxMaterial = new THREE.MeshBasicMaterial({
-        color: 0xff0000,
+    for (var k = 0; k < world.contacts.length; k++) {
+      if (contactMeshes.length === 0) {
+        var geometry = new THREE.SphereGeometry(0.1, 8, 6);
+        var material = new THREE.MeshBasicMaterial({
+          color: 0xffff00
+        });
+        for (var j = 0; j < 16; j++) {
+          contactMeshes[j] = new THREE.Mesh(geometry, material);
+          // put them of screen
+          contactMeshes[j].position.x = 20;
+          scene.add(contactMeshes[j]);
+        };
+      }
+
+      contactMeshes[k].position.copy(world.contacts[k].point);
+    };
+    /* PHYSICS DEBUG CONTACTS END */
+
+    /* PHYSICS DEBUG BOUNDING SPHERE START */
+    if (!body.boundingSphere) {
+      var geometry = new THREE.SphereGeometry(body.mesh.geometry.boundingSphere.radius, 8, 8);
+      var material = new THREE.MeshBasicMaterial({
+        color: 0xffff00,
         wireframe: true
       });
-      bbMesh = bbMeshes[meshes[i].uuid] = new THREE.Mesh(bboxGeometry, bboxMaterial);
-      scene.add(bbMesh);
+      var sphere = new THREE.Mesh(geometry, material);
+      body.boundingSphere = sphere;
+      body.mesh.add(sphere);
     }
 
-    var aabb = body.aabb;
+    body.boundingSphere.visible = showBoundingSpheres;
 
-    bbMesh.scale.set(aabb.lowerBound.x - aabb.upperBound.x,
-      aabb.lowerBound.y - aabb.upperBound.y,
-      aabb.lowerBound.z - aabb.upperBound.z);
-
-    bbMesh.position.set((aabb.lowerBound.x + aabb.upperBound.x) * 0.5,
-      (aabb.lowerBound.y + aabb.upperBound.y) * 0.5,
-      (aabb.lowerBound.z + aabb.upperBound.z) * 0.5);
-
-    var collidingIds = [].concat.apply([], world.collidingPairs.sap).map(function(x) {
-      return x.body.id
+    var boundingSphereCollides = world.bodies.some(function(otherBody) {
+      if (otherBody.boundingSphere && otherBody.id !== body.id) {
+        var distance = otherBody.mesh.position.distanceTo(body.mesh.position);
+        var radiusSum = otherBody.mesh.geometry.boundingSphere.radius + body.mesh.geometry.boundingSphere.radius;
+        return (distance < radiusSum);
+      }
     });
-    bbMesh.material.color = (collidingIds.indexOf(body.id) !== -1) ? new THREE.Color(0xff0000) : new THREE.Color(0x000000);
-    /* PHYSICS DEBUG END */
+
+    body.boundingSphere.material.color = boundingSphereCollides ? new THREE.Color(0xff0000) : new THREE.Color(0x00ff00);
+    /* PHYSICS DEBUG BOUNDING SPHERE END */
   }
 }
 
-function physicsSimulation() {
-  debugger;
-  var fy = 0;
+function drawBBMeshes(i, body) {
+  var bbMesh = bbMeshes[meshes[i].uuid];
 
-  /* Gravity of Earth */
-  //fy += m * 9.81;
+  body.computeAABB();
 
-  /* Air resistance force; this would affect both x- and y-directions, but we're only looking at the y-axis in this example. */
-  // https://en.wikipedia.org/wiki/Drag_(physics)
-  var drag = -0.5 * rho * C_d * A * vy * vy;
-  control.drag = drag;
-  fy += drag;
-
-  /* Verlet integration for the y-direction */
-  dy = vy * dt + (0.5 * ay * dt * dt);
-
-  /* The following line is because the math assumes meters but we're assuming 1 cm per pixel, so we need to scale the results */
-  _cubeRed.position.y -= dy; //* 100;
-  new_ay = fy / m;
-  avg_ay = 0.5 * (new_ay + ay);
-  vy += avg_ay * dt;
-
-  /* Let's do very simple collision detection */
-  if (_cubeRed.position.y + r < height && vy > 0) {
-    /* This is a simplification of impulse-momentum collision response. e should be a negative number, which will change the velocity's direction. */
-    vy *= e;
-    /* Move the ball back a little bit so it's not still "stuck" in the wall. */
-    _cubeRed.position.y = height - r;
+  if (bbMesh === undefined) {
+    var bboxGeometry = new THREE.BoxGeometry(1, 1, 1);
+    var bboxMaterial = new THREE.MeshBasicMaterial({
+      color: 0xff0000,
+      wireframe: true
+    });
+    bbMesh = bbMeshes[meshes[i].uuid] = new THREE.Mesh(bboxGeometry, bboxMaterial);
+    scene.add(bbMesh);
   }
 
-  _cubeRed.position.y -= fy / 100;
+  var aabb = body.aabb;
 
-  // rotation 
-  var xVelocity = new THREE.Quaternion().setFromAxisAngle(xAxis, omega.x / 180 * Math.PI);
-  var yVelocity = new THREE.Quaternion().setFromAxisAngle(yAxis, omega.y / 180 * Math.PI);
-  var zVelocity = new THREE.Quaternion().setFromAxisAngle(zAxis, omega.z / 180 * Math.PI);
-  _cubeRed.quaternion.multiply(xVelocity);
-  _cubeRed.quaternion.multiply(yVelocity);
-  _cubeRed.quaternion.multiply(zVelocity);
+  bbMesh.scale.set(aabb.lowerBound.x - aabb.upperBound.x,
+    aabb.lowerBound.y - aabb.upperBound.y,
+    aabb.lowerBound.z - aabb.upperBound.z);
+
+  bbMesh.position.set((aabb.lowerBound.x + aabb.upperBound.x) * 0.5,
+    (aabb.lowerBound.y + aabb.upperBound.y) * 0.5,
+    (aabb.lowerBound.z + aabb.upperBound.z) * 0.5);
+
+  var collidingIds = [].concat.apply([], world.collidingPairs.sap).map(function(x) {
+    return x.body.id
+  });
+  bbMesh.material.color = (collidingIds.indexOf(body.id) !== -1) ? new THREE.Color(0xff0000) : new THREE.Color(0x00ff00);
 }

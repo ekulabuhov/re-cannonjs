@@ -5,7 +5,7 @@ Body.idCounter = 0;
 
 function Body(options) {
   this.id = Body.idCounter++;
-  
+
   var mass = typeof(options.mass) === 'number' ? options.mass : 0;
 
   /**
@@ -69,6 +69,16 @@ function Body(options) {
 
   if (options.position) {
     this.position.copy(options.position);
+  }
+
+  /**
+   * @property mesh
+   * @type {THREE.Mesh}
+   */
+  this.mesh = new THREE.Mesh();
+
+  if (options.mesh) {
+    this.mesh = options.mesh;
   }
 
   /**

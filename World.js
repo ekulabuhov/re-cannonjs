@@ -16,6 +16,24 @@ function World() {
    * @type {Number}
    */
   this.stepnumber = 0;
+
+  /**
+   * @property broadphase
+   * @type {Broadphase}
+   */
+  this.broadphase = new SAPBroadphase(this);
+
+  /**
+   * @property narrowphase
+   * @type {Narrowphase}
+   */
+  this.narrowphase = new Narrowphase();
+
+  /**
+   * @property gravity
+   * @type {Vec3}
+   */
+  this.gravity = new Vec3(0, -0.0098, 0);
 }
 
 World.prototype.step = function(dt) {
@@ -24,6 +42,15 @@ World.prototype.step = function(dt) {
 
 World.prototype.internalStep = function(dt) {
   var half_dt = dt * 0.5;
+
+  // Add gravity to all objects
+  for (i = 0; i !== this.bodies.length; i++) {
+    var body = this.bodies[i];
+
+    body.force.x += body.mass * this.gravity.x;
+    body.force.y += body.mass * this.gravity.y;
+    body.force.z += body.mass * this.gravity.z;
+  }
 
   // Apply damping, see http://code.google.com/p/bullet/issues/detail?id=74 for details
   for (i = 0; i !== this.bodies.length; i++) {
@@ -45,11 +72,6 @@ World.prototype.internalStep = function(dt) {
     body.velocity.y += body.force.y * body.invMass * dt;
     body.velocity.z += body.force.z * body.invMass * dt;
 
-    // Use new velocity  - leap frog
-    body.position.x += body.velocity.x * dt;
-    body.position.y += body.velocity.y * dt;
-    body.position.z += body.velocity.z * dt;
-
     if (body.angularVelocity) {
       /* World_step_step_w, World_step_step_wq - integration I guess? */
       var w = new Quaternion(body.angularVelocity.x, body.angularVelocity.y, body.angularVelocity.z, 0);
@@ -63,6 +85,21 @@ World.prototype.internalStep = function(dt) {
   }
 
   this.collidingPairs = this.broadphase.getCollisionPairs();
+
+  this.contacts = this.narrowphase.getContacts(this.collidingPairs, this.bodies);
+
+  for (var i = 0; i < this.contacts.length; i++) {
+    var contact = this.contacts[i];
+    contact.body.applyImpulse(new Vec3(0, -contact.body.velocity.y*8, 0), new Vec3().copy(contact.body.position));
+  };
+
+  for (i = 0; i !== this.bodies.length; i++) {
+    var body = this.bodies[i];
+    // Use new velocity  - leap frog
+    body.position.x += body.velocity.x * dt;
+    body.position.y += body.velocity.y * dt;
+    body.position.z += body.velocity.z * dt;
+  }
 }
 
 /**
